@@ -1,0 +1,300 @@
+module regFile(clk,R1,R2,W1,D1,We,O1,O2); // 6 i/p , 2 o/p
+input [4:0] R1,R2; //address '5 bits 
+input [4:0] W1;
+
+input[31:0] D1; // data to be saved '32 bits
+input We;
+input clk;
+
+output [31:0] O1,O2; //output data from R1,R2 '32 bits
+
+reg [31:0] index[31:0]; // first is number of reg size , second is number of regs
+
+integer i;
+
+
+initial
+begin
+for (i = 0 ; i < 32 ; i = i+1)
+index[i] = i;
+end
+
+assign O1 = index[R1];
+assign O2 = index[R2];
+
+
+
+always @(posedge clk)
+begin
+if(We)
+index[W1] <= D1;
+end
+
+endmodule 
+
+
+
+
+module ALU(in1,in2,opCode,sh_am,out); // 4 i/p , 1 o/p
+
+input [31:0] in1,in2;
+input [3:0] opCode;
+input [4:0] sh_am;
+
+output reg[31:0] out;
+
+always @ *
+begin
+case(opCode)
+0: out = in1 + in2;
+1: out = in1 - in2; 
+2: out = in1 & in2;
+3: out = in1 | in2;
+4: out = in1 << sh_am;
+5: out = in1 >> sh_am;
+6: out = $signed (in1) >>> sh_am;
+7: out = $signed (in1) > $signed (in2);
+8: out = $signed (in1) < $signed (in2);
+default: out= 32'b x;
+endcase
+
+
+end
+
+endmodule
+
+module CPU(clk,R1,R2,W1,Dext,We,seMux,opCode,sh_am,out); // 9 i/p , 1 o/p
+
+input clk,We,seMux;
+input [31:0] Dext;
+input [4:0] R1,R2,W1,sh_am;
+input [3:0] opCode;
+
+output [31:0] out;
+
+reg [31:0] D1;
+wire [31:0] O1,O2;
+
+always@(seMux)
+case(seMux)
+0: D1 = Dext;
+1: D1 = out;
+endcase
+
+regFile Reg1(clk,R1,R2,W1,D1,We,O1,O2);
+ALU Alu1(O1,O2,opCode,sh_am,out);
+
+endmodule
+
+module testRegFile1; 
+
+ reg [4:0] R1,R2; //address '5 bits 
+ reg [4:0] W1;
+
+ reg[31:0] D1; // data to be saved '32 bits
+ reg We;
+ reg clk;
+
+ wire [31:0] in1,in2; //output data from R1,R2 '32 bits
+
+
+initial
+fork
+
+$monitor($time, "R1:%d , R2: %d ,W1 = %d , D1=%d , We=%d, clk=%d, out1=%d, out2=%d ",R1,R2,W1,D1,We,clk,in1,in2);
+
+clk = 0;
+We =1;
+
+
+forever
+begin #1 clk = ~ clk;  #5 We = ~ We;  end
+
+
+
+#15 W1 = 0;
+#15 D1 = 7;
+
+#20 W1 = 1;
+#20 D1= 9;
+
+#30 R1 = 0;
+#30 R2 = 1;
+
+#50 D1= 12;
+
+
+join
+
+regFile Reg1(R1,R2,W1,D1,We,clk,in1,in2);
+endmodule 
+
+module testALU1;
+
+reg signed  [31:0] in1,in2;
+reg  [3:0] opCode;
+reg  [4:0] sh_am;
+wire signed [31:0] out;
+
+
+initial
+begin
+
+//add
+$monitor("in1= %d , in2 = %d ,opcode=%d, out = %d ",in1,in2,opCode,out);
+in1 = -3; in2 =5; opCode=0; 
+#10
+
+//sub
+$monitor("in1= %d , in2 = %d ,opcode=%d, out = %d ",in1,in2,opCode,out);
+in1 = 7; in2 = 17; opCode=1;
+#10
+
+
+//greater than
+$monitor("in1= %d , in2 = %d ,opcode=%d, out = %d ",in1,in2,opCode,out);
+in1 = 8; in2 =5; opCode=7; 
+#10
+$monitor("in1= %d , in2 = %d ,opcode=%d, out = %d ",in1,in2,opCode,out);
+in1 = -8; in2 =5; opCode=7; 
+#10
+
+//less than
+$monitor("in1= %d , in2 = %d ,opcode=%d, out = %d ",in1,in2,opCode,out);
+in1 = 11; in2 =4; opCode=8;
+#10 
+$monitor("in1= %d , in2 = %d ,opcode=%d, out = %d ",in1,in2,opCode,out);
+in1 = -11; in2 =4; opCode=8;
+#10
+
+//and
+$monitor("in1= %b , in2 = %b ,opcode=%d, out = %b ",in1,in2,opCode,out);
+in1=5; in2= 1; opCode=2;
+#10
+
+//or
+$monitor("in1= %b , in2 = %b ,opcode=%d, out = %b ",in1,in2,opCode,out);
+in1=16; in2=9; opCode=3;
+#10
+
+//sh left
+$monitor("in1= %b , sh_amount = %d ,opcode=%d, out = %b ",in1,sh_am,opCode,out);
+in1=2; sh_am= 2; opCode=4;
+#10
+
+//sh right log
+$monitor("in1= %b , sh_amount = %d ,opcode=%d, out = %b ",in1,sh_am,opCode,out);
+in1=-4; sh_am= 3; opCode=5;
+#10
+
+//sh right arith
+$monitor("in1= %b , sh_amount = %d ,opcode=%d, out = %b ",in1,sh_am,opCode,out);
+in1=-4; sh_am= 3; opCode=6;
+
+end
+
+
+ALU alu1(in1,in2,opCode,sh_am,out);
+endmodule
+
+module testCPU1;
+reg seMux;
+reg clk=0;
+reg We=1;
+reg [4:0] R1,R2,W1,sh_am;
+reg signed [31:0] Dext;
+reg [3:0] opCode;
+wire signed [31:0] out;
+
+CPU Cpu1(clk,R1,R2,W1,Dext,We,seMux,opCode,sh_am,out);
+
+
+always
+begin
+#1 clk = ~clk;
+end
+
+
+initial
+begin
+
+//Write external
+$monitor("writeEnable=%b,mux=%b,address=%d,dataExternal=%d",We,seMux,W1,Dext);
+W1=30; Dext=-4; seMux=0;
+#10
+
+We=0;
+
+//add
+$monitor("address1= %d , address2 = %d ,opcode=%d, out = %d ",R1,R2,opCode,out);
+R1 = 10; R2 =5; opCode=0; 
+#10
+
+//sub
+$monitor("address1= %d , address2 = %d ,opcode=%d, out = %d ",R1,R2,opCode,out);
+R1 = 7; R2 = 17; opCode=1;
+#10
+
+
+//greater than
+$monitor("address1= %d , address2 = %d ,opcode=%d, out = %d ",R1,R2,opCode,out);
+R1 = 8; R2 =5; opCode=7; 
+#10
+$monitor("address1= %d , address2 = %d ,opcode=%d, out = %d ",R1,R2,opCode,out);
+R1 = 3; R2 =6; opCode=7; 
+#10
+
+//less than
+$monitor("address1= %d , address2 = %d ,opcode=%d, out = %d ",R1,R2,opCode,out);
+R1 = 11; R2 =4; opCode=8;
+#10
+$monitor("address1= %d , address2 = %d ,opcode=%d, out = %d ",R1,R2,opCode,out);
+R1 = 1; R2 =4; opCode=8;
+#10
+
+//and
+$monitor("address1= %b , address2 = %b ,opcode=%d, out = %b ",R1,R2,opCode,out);
+R1=5; R2= 1; opCode=2;
+#10
+
+//or
+$monitor("address1= %b , address2 = %b ,opcode=%d, out = %b ",R1,R2,opCode,out);
+R1=16; R2=9; opCode=3;
+#10
+
+//sh left
+$monitor("address1= %b , sh_amount = %d ,opcode=%d, out = %b ",R1,sh_am,opCode,out);
+R1=8; sh_am= 2; opCode=4;
+#10
+
+//sh right log
+$monitor("Value in add30= %b , sh_amount = %d ,opcode=%d, out = %b ",-4,sh_am,opCode,out);
+R1=30; sh_am= 3; opCode=5;
+#10
+
+//sh right arith
+$monitor("Value in add30= %b , sh_amount = %d ,opcode=%d, out = %b ",-4,sh_am,opCode,out);
+R1=30; sh_am= 3; opCode=6;
+#10
+
+//add
+$monitor("address1= %d , address2 = %d ,opcode=%d, out = %d ",R1,R2,opCode,out);
+R1 = 2; R2 =6; opCode=0; 
+
+We=1;
+
+#10
+
+//Write internal
+$monitor("writeEnable=%b,mux=%b,address=%d",We,seMux,W1);
+W1=22; seMux=1; 
+#10
+
+//add
+$monitor("address1= %d , address2 = %d ,opcode=%d, out = %d ",R1,R2,opCode,out);
+R1 = 22; R2 =3; opCode=0; 
+
+end
+
+
+endmodule 
